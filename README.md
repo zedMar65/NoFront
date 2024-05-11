@@ -4,7 +4,7 @@
 
 NF is a free open-source tool to make low level internet communication simple and bare bone and as the name suggests it has NO front end
 It does not seek to replace www but could be used as a simpler, non centralized solution for smaller, more secure networks
-
+- By scriptKiddies for scriptKiddies
 ---
 ### Usage
 

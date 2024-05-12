@@ -5,12 +5,16 @@ import os
 import threading
 import subprocess
 
+sys.path.append('../')
+
+from compiler.Compiler import Compiler
+
 screen = curses.initscr()
 
 curses.noecho()
 curses.start_color()
 curses.use_default_colors()
-curses.init_color(1, 100, 100, 100)
+curses.init_color(1, 500, 500, 500)
 # curses.init_color(curses.COLOR_GREY, 100, 100, 100)
 curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_WHITE)
 curses.init_pair(2, 1, curses.COLOR_BLACK)
@@ -24,9 +28,15 @@ def init():
     sizRow = int((ROWS-1)/3)
     sizCol = int((COLS-1)/2)
 
+    global output
     global curdir
     global windows
     global oldCOut
+    global connection
+    global listen
+    listen = False
+    connection = [0]
+    output = ""
     curdir = os.getcwd()
     oldCOut = f"NfConsole:{str(curdir)}>"
     windows = []
@@ -56,10 +66,24 @@ def checkConsole(currCommand, currWin, pressedKey):
     global oldCOut
     global Running
     global curdir
+    global output
+    global connection
+    global listen
     
     if pressedKey == 10:
         if currCommand == "exit":
             Running = False
+        elif connection[0] == 1:
+            if currCommand[:4] == "send":
+                output = Compiler.send(connection, currCommand[5:])
+            elif currCommand[:4] == "recv":
+                output = Compiler.recv(connection, currCommand[5:])
+            elif currCommand[:4] == "list":
+                output = Compiler.list(connection)
+            elif currCommand[:4] == "stop":
+                output = Compiler.stop(connection)
+                connection = [0]
+            
         elif currCommand == "clear":
             oldCOut = f"NfConsole:{str(curdir)}>"
             windows[currWin].clear()
@@ -75,14 +99,14 @@ def checkConsole(currCommand, currWin, pressedKey):
                     with open(currCommand[5:].split(">>")[1], "a") as file:
                         file.write(currCommand[5:].split(">>")[0])
                 except:
-                    oldCOut += f"Error: {currCommand[5:].split('>>')[1]} is not a valid file\n"
+                    output = f"Error: {currCommand[5:].split('>>')[1]} is not a valid file\n"
             else:
                 oldCOut += f"{currCommand[5:]}\n"
         elif currCommand[:2] == "ls":
             try:
-                oldCOut += "\n"
+                output = ""
                 for file in os.listdir(curdir):
-                    oldCOut += f"{file}\n"
+                    output += f"{file}\n"
             except:
                 oldCOut += f"Error: {curdir} is not a valid directory\n"
         elif currCommand[:4] == "nano":
@@ -97,6 +121,29 @@ def checkConsole(currCommand, currWin, pressedKey):
                 os.remove(currCommand[3:])
             except:
                 oldCOut += f"Error: {currCommand[3:]} is not a valid file\n"
+        elif currCommand[:4] == "init":
+            init()
+        elif currCommand[:3] == "run":
+            if len(currCommand[4:].split("-c")) == 2:
+                output = Compiler.run(currCommand[4:].split("-c")[0], currCommand[4:].split("-c")[1])
+            else:
+                output = Compiler.run(currCommand[4:], "")
+        elif currCommand[:7] == "connect":
+            if len(currCommand[8:].split(" ")) == 2:
+                # connection [key, ipother, password, port]
+                connection = Compiler.connect(currCommand[8:].split(" ")[0], password=currCommand[8:].split(" ")[1])
+            else:
+                connection = Compiler.connect(currCommand[8:], password="")
+            if connection[0] == 1:
+                output = f"Connected to {connection[1]}\n"
+                    
+            else:
+                output = f"Refused Connection\n"
+        elif currCommand[:5] == "listen":
+            listen = currCommand[6:]
+        windows[0].clear()
+        windows[0].addstr(0, 0, str(output))   
+        windows[0].refresh() 
         oldCOut += f"{currCommand}\nNfConsole:{str(curdir)}>"
         currCommand = ""
     elif pressedKey == 8:
@@ -122,6 +169,10 @@ def main():
     global oldCOut
     global curdir
     global Running
+    global connection
+    global listen
+    
+    connection = [0]
     currCommand = ""
     
     for win in windows:
@@ -140,6 +191,13 @@ def main():
                     break
                 elif currWin == 2:
                     currCommand = checkConsole(currCommand, currWin, pressedKey)
+            if listen:
+                msg = Compiler.listen()
+                if msg:
+                    output = msg
+                    windows[0].clear()
+                    windows[0].addstr(0, 0, str(output))
+                    windows[0].refresh()
             # time.sleep(0.1)
         except KeyboardInterrupt:
             Running = False
